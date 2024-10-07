@@ -111,17 +111,50 @@ namespace EADProject.Controllers
             return NoContent();
         }
 
-        // PUT: api/order/{orderId}/vendor/{vendorId}/status/readyfordelivery
-        [HttpPut("{orderId}/vendor/{vendorId}/updateStatus/readyfordelivery")]
-        public async Task<IActionResult> UpdateVendorOrderStatus(string orderId, string vendorId)
+        [HttpPut("{orderId}/vendor/{vendorId}/updateVendorStatus/ready")]
+        public async Task<IActionResult> UpdateVendorStatusToReady(string orderId, string vendorId)
         {
-            var result = await _orderService.UpdateVendorOrderStatus(orderId, vendorId);
-            if (!result)
+            // Retrieve the order by ID
+            var order = await _orderService.GetOrderById(orderId);
+            if (order == null) return NotFound();
+
+            // Find the vendor's items and update their status to Ready
+            foreach (var item in order.Items.Where(i => i.VendorId == vendorId))
             {
-                return BadRequest("Vendor order status could not be updated to Ready for Delivery.");
+                item.VendorStatus = VendorOrderStatus.Ready;
             }
+
+            // Instead of inserting a new order, update the existing order
+            var updateResult = await _orderService.UpdateOrder(order);
+
+            if (!updateResult)
+            {
+                return BadRequest("Failed to update the order.");
+            }
+
+            // Check if all vendors are ready and update the overall order status
+            await _orderService.UpdateOrderStatusBasedOnVendorReadiness(orderId);
 
             return NoContent();
         }
+
+        // Endpoint to update the cancellation note
+        [HttpPut("{orderId}/updateCancellationNote")]
+        public async Task<IActionResult> UpdateCancellationNote(string orderId, [FromBody] UpdateCancellationNoteRequest request)
+        {
+            var updated = await _orderService.UpdateCancellationNoteAsync(orderId, request.CancellationNote);
+            if (updated)
+            {
+                return Ok(new { message = "Cancellation note updated successfully." });
+            }
+            return NotFound(new { message = "Order not found or update failed." });
+        }
+
+    }
+
+    // Request model to pass the cancellation note
+    public class UpdateCancellationNoteRequest
+    {
+        public string CancellationNote { get; set; }
     }
 }
